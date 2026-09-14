@@ -23,10 +23,10 @@ const getDeviceId = () => {
 const deviceId = getDeviceId();
 const userId = getUserId();
 
-// Dynamic server URL:
-// - If VITE_SERVER_URL is provided, use that
-// - If running inside Vite dev server (port 5173), default to server on 3001
-// - If running through Nginx load balancer or Express directly, use window.location.origin
+// Server URL resolution:
+// 1. VITE_SERVER_URL env var  — set this on Vercel for the deployed backend URL
+// 2. Port 5173 (Vite dev)    — defaults to localhost:3001
+// 3. Everything else          — same origin (works on Vercel: client + server share one domain)
 export const SERVER_OPTIONS = [
   { id: 'server-1', label: 'Server 1 (Port 3001)', url: 'http://localhost:3001' },
   { id: 'server-2', label: 'Server 2 (Port 3002)', url: 'http://localhost:3002' },
@@ -41,9 +41,11 @@ const getDefaultServerUrl = () => {
     return import.meta.env.VITE_SERVER_URL;
   }
   if (typeof window !== 'undefined') {
+    // Vite dev server → proxy to local server
     if (window.location.port === '5173') {
       return 'http://localhost:3001';
     }
+    // Production (Vercel or any host): client and server share the same origin
     return window.location.origin;
   }
   return 'http://localhost:3001';
