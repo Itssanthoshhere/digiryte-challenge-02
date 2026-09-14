@@ -6,6 +6,12 @@
 
 A distributed, real-time collaborative Kanban board built with **Node.js, Express, Socket.io, Redis Pub/Sub, MongoDB, and React (Tailwind CSS)**. The system runs across multiple server instances with state shared in real time through a Redis pub/sub adapter, central persistence in MongoDB, automatic reconnection on hard disconnects, and full state recovery across different server nodes.
 
+<div align="center">
+
+[![Live Demo](https://img.shields.io/badge/🚀%20Live%20Demo-digiryte--challenge--02.vercel.app-db4435?style=for-the-badge&logo=vercel&logoColor=white)](https://digiryte-challenge-02.vercel.app/)
+
+</div>
+
 ---
 
 ## Architecture
