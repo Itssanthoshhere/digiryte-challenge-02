@@ -125,7 +125,7 @@ function App() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#0f1117] text-slate-100 flex flex-col selection:bg-sky-500/30">
+    <div className="min-h-screen bg-[#fafbfd] text-[#233642] flex flex-col selection:bg-[#fff3f2] selection:text-[#db4435]">
       <StatusBar
         status={status}
         serverInfo={serverInfo}
@@ -133,22 +133,34 @@ function App() {
         deviceId={deviceId}
       />
 
-      {/* Header */}
-      <header className="text-center pt-8 pb-4 px-4">
-        <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight bg-gradient-to-r from-sky-400 via-indigo-400 to-purple-400 bg-clip-text text-transparent">
-          Kanban Sync
-        </h1>
-        <p className="text-slate-400 text-xs sm:text-sm mt-1.5 max-w-lg mx-auto">
-          Distributed real-time sync with Socket.io, Redis Pub/Sub, and MongoDB persistence.
+      {/* Digiryte Branded Header */}
+      <header className="text-center pt-8 pb-3 px-4 flex flex-col items-center">
+        <div className="flex items-center gap-3.5 mb-2">
+          <img
+            src="/logo.svg"
+            alt="Digiryte Logo"
+            className="h-11 w-11 rounded-xl shadow-md border border-slate-200/80 transition-transform duration-200 hover:scale-105"
+          />
+          <div className="text-left">
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#171c26] flex items-center gap-1.5">
+              Digiryte <span className="text-[#db4435]">Sync</span>
+            </h1>
+            <p className="text-[11px] font-semibold tracking-wider uppercase text-[#5d6d77]">
+              Distributed Real-Time Kanban
+            </p>
+          </div>
+        </div>
+        <p className="text-[#5d6d77] text-xs sm:text-sm mt-1 max-w-lg mx-auto">
+          Synchronized across multiple server instances via Redis Pub/Sub & MongoDB.
         </p>
       </header>
 
-      {/* Add Task Input */}
+      {/* Add Task Input with Digiryte Red Accents */}
       <div className="w-full max-w-xl mx-auto px-4 py-3">
         <form onSubmit={handleAddTask} className="flex gap-2.5">
           <input
             type="text"
-            className="flex-1 px-4 py-2.5 bg-[#181c2b] border border-slate-700/80 rounded-xl text-slate-100 placeholder-slate-500 text-sm focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 shadow-inner transition duration-200"
+            className="flex-1 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 text-sm focus:outline-none focus:border-[#db4435] focus:ring-2 focus:ring-[#db4435]/15 shadow-xs transition duration-200"
             placeholder="Add a new task..."
             value={taskTitle}
             onChange={(e) => setTaskTitle(e.target.value)}
@@ -158,7 +170,7 @@ function App() {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="px-5 py-2.5 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white font-semibold text-sm rounded-xl shadow-md hover:shadow-sky-500/20 active:scale-95 disabled:opacity-50 transition-all duration-200 cursor-pointer whitespace-nowrap"
+            className="px-6 py-2.5 bg-[#db4435] hover:bg-[#b5372b] text-white font-semibold text-sm rounded-xl shadow-[0_2px_8px_rgba(219,68,53,0.25)] hover:shadow-[0_4px_14px_rgba(219,68,53,0.35)] active:scale-95 disabled:opacity-50 transition-all duration-200 cursor-pointer whitespace-nowrap"
           >
             {isSubmitting ? 'Adding...' : 'Add Task'}
           </button>
@@ -182,15 +194,15 @@ function App() {
 
       {/* Disconnection / Reconnection Overlay */}
       {status !== 'connected' && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex flex-col items-center justify-center p-4">
-          <div className="bg-[#181c2b] border border-slate-700/80 rounded-2xl p-6 max-w-sm w-full text-center shadow-2xl">
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex flex-col items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 max-w-sm w-full text-center shadow-2xl">
             <div className="relative flex justify-center mb-4">
-              <div className="w-10 h-10 border-3 border-slate-700 border-t-sky-400 rounded-full animate-spin"></div>
+              <div className="w-10 h-10 border-3 border-slate-200 border-t-[#db4435] rounded-full animate-spin"></div>
             </div>
-            <h3 className="text-base font-bold text-slate-100">
+            <h3 className="text-base font-bold text-slate-900">
               {status === 'reconnecting' ? 'Reconnecting to cluster...' : 'Connection Interrupted'}
             </h3>
-            <p className="text-xs text-slate-400 mt-2">
+            <p className="text-xs text-slate-500 mt-2">
               Auto-reconnecting. State will automatically recover from MongoDB once reconnected.
             </p>
           </div>

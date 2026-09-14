@@ -9,7 +9,7 @@ function TaskCard({ task, onDelete, onMove }) {
   };
 
   const columnBorderColors = {
-    todo: 'border-l-sky-500',
+    todo: 'border-l-[#db4435]',
     'in-progress': 'border-l-amber-500',
     done: 'border-l-emerald-500',
   };
@@ -35,15 +35,15 @@ function TaskCard({ task, onDelete, onMove }) {
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       id={`task-${task._id}`}
-      className={`group relative bg-[#202538] hover:bg-[#262c42] border border-slate-700/60 border-l-[3.5px] ${columnBorderColors[task.column] || 'border-l-slate-500'} rounded-xl p-3.5 cursor-grab active:cursor-grabbing shadow-md hover:shadow-xl hover:-translate-y-0.5 transition-all duration-200 select-none`}
+      className={`group relative bg-white hover:bg-[#fcfdfd] border border-slate-200/80 border-l-4 ${columnBorderColors[task.column] || 'border-l-slate-400'} rounded-xl p-4 cursor-grab active:cursor-grabbing shadow-[0_2px_8px_-2px_rgba(0,0,0,0.06)] hover:shadow-[0_8px_20px_-4px_rgba(0,0,0,0.08)] hover:-translate-y-0.5 transition-all duration-200 select-none`}
     >
       <div className="flex justify-between items-start gap-2">
-        <p className="text-sm font-medium text-slate-100 leading-snug break-words flex-1 pr-6">
+        <p className="text-sm font-semibold text-slate-800 leading-snug break-words flex-1 pr-6">
           {task.title}
         </p>
         <button
           type="button"
-          className="absolute top-2.5 right-2.5 w-6 h-6 flex items-center justify-center rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/15 opacity-0 group-hover:opacity-100 transition-all duration-150"
+          className="absolute top-3 right-3 w-6 h-6 flex items-center justify-center rounded-lg text-slate-400 hover:text-[#db4435] hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all duration-150 cursor-pointer"
           title="Delete task"
           onClick={() => onDelete(task._id)}
         >
@@ -51,16 +51,16 @@ function TaskCard({ task, onDelete, onMove }) {
         </button>
       </div>
 
-      <div className="flex justify-between items-center mt-3 pt-2.5 border-t border-slate-700/40 text-[11px] text-slate-400">
-        <span className="font-mono">
-          {time} · <span className="text-slate-300 font-semibold">{task.createdBy}</span>
+      <div className="flex justify-between items-center mt-3 pt-2.5 border-t border-slate-100 text-[11px] text-slate-500">
+        <span>
+          {time} · <strong className="text-slate-700 font-medium">{task.createdBy}</strong>
         </span>
 
         <div className="flex items-center gap-1.5">
           {currentIndex > 0 && (
             <button
               type="button"
-              className="px-2 py-0.5 rounded border border-slate-700/80 bg-slate-800/60 hover:bg-sky-500/15 hover:border-sky-500/60 hover:text-sky-300 text-slate-400 text-[11px] transition-all duration-150"
+              className="px-2 py-0.5 rounded-md border border-slate-200 bg-slate-50/80 hover:bg-[#fff3f2] hover:border-[#fddad7] hover:text-[#db4435] text-slate-600 text-[11px] font-medium transition-all duration-150 cursor-pointer"
               onClick={() => onMove(task._id, columns[currentIndex - 1])}
             >
               {columnLabels[columns[currentIndex - 1]]}
@@ -69,7 +69,7 @@ function TaskCard({ task, onDelete, onMove }) {
           {currentIndex < columns.length - 1 && (
             <button
               type="button"
-              className="px-2 py-0.5 rounded border border-slate-700/80 bg-slate-800/60 hover:bg-sky-500/15 hover:border-sky-500/60 hover:text-sky-300 text-slate-400 text-[11px] transition-all duration-150"
+              className="px-2 py-0.5 rounded-md border border-slate-200 bg-slate-50/80 hover:bg-[#fff3f2] hover:border-[#fddad7] hover:text-[#db4435] text-slate-600 text-[11px] font-medium transition-all duration-150 cursor-pointer"
               onClick={() => onMove(task._id, columns[currentIndex + 1])}
             >
               {columnLabels[columns[currentIndex + 1]]}
