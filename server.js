@@ -61,20 +61,46 @@ async function startServer() {
   });
 
   try {
-    const pubClient = createClient({ url: REDIS_URL });
+    const redisConfig = {
+      url: REDIS_URL,
+      socket: {
+        reconnectStrategy: (retries) => {
+          // Stop retrying if Redis is not running after 2 attempts
+          if (retries > 2) {
+            return new Error('Redis not reachable');
+          }
+          return 500;
+        },
+      },
+    };
+
+    const pubClient = createClient(redisConfig);
     const subClient = pubClient.duplicate();
 
+    // Attach temporary error handlers during initial connection
+    const onPubError = (err) => {
+      // Suppress unhandled crash during connect attempt
+    };
+    pubClient.on('error', onPubError);
+    subClient.on('error', onPubError);
+
+    await Promise.all([pubClient.connect(), subClient.connect()]);
+
+    // Once connected successfully, attach permanent logging handlers
+    pubClient.off('error', onPubError);
+    subClient.off('error', onPubError);
     pubClient.on('error', (err) => console.error(`[${SERVER_ID}] Redis pub error:`, err.message));
     subClient.on('error', (err) => console.error(`[${SERVER_ID}] Redis sub error:`, err.message));
 
-    await Promise.all([pubClient.connect(), subClient.connect()]);
-    console.log(`[${SERVER_ID}] Connected to Redis`);
+    console.log(`[${SERVER_ID}] Connected to Redis at ${REDIS_URL}`);
 
     io.adapter(createAdapter(pubClient, subClient));
-    console.log(`[${SERVER_ID}] Redis adapter attached`);
+    console.log(`[${SERVER_ID}] Redis adapter attached for cross-instance sync`);
   } catch (err) {
-    console.error(`[${SERVER_ID}] Redis connection error:`, err.message);
-    console.warn(`[${SERVER_ID}] Running WITHOUT Redis adapter (single-instance mode)`);
+    console.warn(`\n[${SERVER_ID}] ⚠️  Could not connect to Redis at ${REDIS_URL}: ${err.message || 'Connection refused'}`);
+    console.warn(`[${SERVER_ID}] ℹ️  To enable cross-instance sync, ensure Redis is running:`);
+    console.warn(`[${SERVER_ID}]    • Run locally: brew install redis && brew services start redis`);
+    console.warn(`[${SERVER_ID}]    • Or set REDIS_URL in .env to a free cloud Redis (e.g. Upstash)\n`);
   }
 
   // ── Socket.io connection handling ──
