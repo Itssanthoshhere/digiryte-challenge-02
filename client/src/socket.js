@@ -17,7 +17,16 @@ const userId = getUserId();
 // - If VITE_SERVER_URL is provided, use that
 // - If running inside Vite dev server (port 5173), default to server on 3001
 // - If running through Nginx load balancer or Express directly, use window.location.origin
+export const SERVER_OPTIONS = [
+  { id: 'server-1', label: 'Server 1 (Port 3001)', url: 'http://localhost:3001' },
+  { id: 'server-2', label: 'Server 2 (Port 3002)', url: 'http://localhost:3002' },
+  { id: 'load-balancer', label: 'Load Balancer (Port 3000)', url: 'http://localhost:3000' },
+];
+
 const getDefaultServerUrl = () => {
+  const savedUrl = localStorage.getItem('kanban-serverUrl');
+  if (savedUrl) return savedUrl;
+
   if (import.meta.env.VITE_SERVER_URL) {
     return import.meta.env.VITE_SERVER_URL;
   }
@@ -30,9 +39,9 @@ const getDefaultServerUrl = () => {
   return 'http://localhost:3001';
 };
 
-const SERVER_URL = getDefaultServerUrl();
+const CURRENT_SERVER_URL = getDefaultServerUrl();
 
-const socket = io(SERVER_URL, {
+const socket = io(CURRENT_SERVER_URL, {
   transports: ['websocket'], // WebSocket only — no sticky sessions needed
   query: { userId, deviceId },
   reconnection: true,
@@ -41,4 +50,16 @@ const socket = io(SERVER_URL, {
   reconnectionDelayMax: 5000,
 });
 
-export { socket, userId, deviceId };
+export const switchServer = (targetUrl) => {
+  localStorage.setItem('kanban-serverUrl', targetUrl);
+  window.location.reload();
+};
+
+export const simulateHardDisconnect = (durationMs = 2000) => {
+  socket.disconnect();
+  setTimeout(() => {
+    socket.connect();
+  }, durationMs);
+};
+
+export { socket, userId, deviceId, CURRENT_SERVER_URL };
