@@ -77,10 +77,8 @@ async function startServer() {
     const pubClient = createClient(redisConfig);
     const subClient = pubClient.duplicate();
 
-    // Attach temporary error handlers during initial connection
-    const onPubError = (err) => {
-      // Suppress unhandled crash during connect attempt
-    };
+    // Suppress unhandled crash during initial connect attempt; permanent handlers attached after success
+    const onPubError = (err) => console.warn(`[${SERVER_ID}] Redis connect attempt error: ${err.message}`);
     pubClient.on('error', onPubError);
     subClient.on('error', onPubError);
 

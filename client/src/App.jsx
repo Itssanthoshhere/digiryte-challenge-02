@@ -103,11 +103,8 @@ function App() {
     socket.emit('task:delete', { taskId });
   }, []);
 
+  // Handles both button-click moves and drag-and-drop (same operation)
   const handleMoveTask = useCallback((taskId, toColumn) => {
-    socket.emit('task:move', { taskId, toColumn });
-  }, []);
-
-  const handleDrop = useCallback((taskId, toColumn) => {
     socket.emit('task:move', { taskId, toColumn });
   }, []);
 
@@ -187,7 +184,7 @@ function App() {
             tasks={tasksByColumn[col.key] || []}
             onDelete={handleDeleteTask}
             onMove={handleMoveTask}
-            onDrop={handleDrop}
+            onDrop={handleMoveTask}
           />
         ))}
       </main>

@@ -10,7 +10,7 @@ const getUserId = () => {
   return id;
 };
 
-// Clean tab ID stored in sessionStorage (unique per tab/window)
+// deviceId is unique per browser tab (sessionStorage — cleared when tab closes)
 const getDeviceId = () => {
   let id = sessionStorage.getItem('kanban-tabId');
   if (!id) {
@@ -62,7 +62,8 @@ const socket = io(CURRENT_SERVER_URL, {
 
 export const updateUserId = (newUserId) => {
   const trimmed = newUserId.trim();
-  if (!trimmed || trimmed === userId) return;
+  const current = localStorage.getItem('kanban-userId');
+  if (!trimmed || trimmed === current) return;
   localStorage.setItem('kanban-userId', trimmed);
   window.location.reload();
 };
