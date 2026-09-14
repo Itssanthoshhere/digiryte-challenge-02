@@ -7,6 +7,7 @@ const { Server } = require('socket.io');
 const mongoose = require('mongoose');
 const { createClient } = require('redis');
 const { createAdapter } = require('@socket.io/redis-adapter');
+const cors = require('cors');
 const Task = require('./models/Task');
 
 const PORT = process.env.PORT || 3001;
@@ -17,8 +18,12 @@ const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
 const app = express();
 const server = http.createServer(app);
 
-// Serve static files
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(cors());
+app.use(express.json());
+
+// Serve static React build files
+const clientDistPath = path.join(__dirname, 'client', 'dist');
+app.use(express.static(clientDistPath));
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -170,6 +175,16 @@ async function startServer() {
     // ── Disconnect ──
     socket.on('disconnect', (reason) => {
       console.log(`[${SERVER_ID}] Client disconnected: userId=${userId}, deviceId=${deviceId}, reason=${reason}`);
+    });
+  });
+
+  // SPA fallback
+  app.get('*', (req, res) => {
+    const indexPath = path.join(clientDistPath, 'index.html');
+    res.sendFile(indexPath, (err) => {
+      if (err) {
+        res.status(200).send('Kanban Sync API Server Running');
+      }
     });
   });
 
