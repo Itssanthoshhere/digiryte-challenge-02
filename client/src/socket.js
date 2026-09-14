@@ -1,16 +1,26 @@
 import { io } from 'socket.io-client';
 
-// userId persists across tabs (same user), deviceId is unique per tab
+// userId persists across tabs (default to 'Santhosh', customizable by user)
 const getUserId = () => {
   let id = localStorage.getItem('kanban-userId');
   if (!id) {
-    id = 'user-' + Math.random().toString(36).substring(2, 9);
+    id = 'Santhosh';
     localStorage.setItem('kanban-userId', id);
   }
   return id;
 };
 
-const deviceId = 'device-' + Math.random().toString(36).substring(2, 9);
+// Clean tab ID stored in sessionStorage (unique per tab/window)
+const getDeviceId = () => {
+  let id = sessionStorage.getItem('kanban-tabId');
+  if (!id) {
+    id = 'tab-' + Math.random().toString(36).substring(2, 6);
+    sessionStorage.setItem('kanban-tabId', id);
+  }
+  return id;
+};
+
+const deviceId = getDeviceId();
 const userId = getUserId();
 
 // Dynamic server URL:
@@ -49,6 +59,13 @@ const socket = io(CURRENT_SERVER_URL, {
   reconnectionDelay: 1000,
   reconnectionDelayMax: 5000,
 });
+
+export const updateUserId = (newUserId) => {
+  const trimmed = newUserId.trim();
+  if (!trimmed || trimmed === userId) return;
+  localStorage.setItem('kanban-userId', trimmed);
+  window.location.reload();
+};
 
 export const switchServer = (targetUrl) => {
   localStorage.setItem('kanban-serverUrl', targetUrl);
