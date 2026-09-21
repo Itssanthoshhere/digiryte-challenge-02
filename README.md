@@ -1,10 +1,10 @@
-# Distributed Real-Time Sync — Collaborative Kanban Board
+# Distributed Real-Time Sync — Collaborative Enterprise Kanban Board
 
-> **Digiryte UK — Technical Challenge (Round 3 Assessment)**
-> **Candidate:** Santhosh VS
-> **Challenge:** Challenge 2 — Distributed Real-Time Sync
+> **Digiryte UK — Technical Challenge (Round 3 Assessment)**  
+> **Candidate:** Santhosh VS  
+> **Challenge:** Challenge 2 — Enterprise Real-Time Sync & Multi-Node Cluster
 
-A distributed, real-time collaborative Kanban board built with **Node.js, Express, Socket.io, Redis Pub/Sub, MongoDB, and React (Tailwind CSS)**. The system runs across multiple server instances with state shared in real time through a Redis pub/sub adapter, central persistence in MongoDB, automatic reconnection on hard disconnects, and full state recovery across different server nodes.
+An enterprise-grade, distributed real-time collaborative Kanban system built with **Node.js, Express, Socket.io, Redis Pub/Sub, MongoDB, Zod, JWT, and React (Tailwind CSS)**.
 
 <div align="center">
 
@@ -14,58 +14,62 @@ A distributed, real-time collaborative Kanban board built with **Node.js, Expres
 
 ---
 
-## Architecture
+## Architecture & Cluster Overview
 
 ```
-                 ┌──────────────────────────────────────────────┐
-                 │       Browser Clients (Tabs / Devices)       │
-                 │   (userId in localStorage, tabId in session) │
-                 └──────────────────────┬───────────────────────┘
-                                        │
-                         WebSocket (ws://) connection
-                                        │
-                                        ▼
-                 ┌──────────────────────────────────────────────┐
-                 │       Load Balancer (Port 3000)              │
-                 │  Node.js http-proxy — round-robin + WS proxy │
-                 └──────────────┬───────────────────────────────┘
-                                │
-                   ┌────────────┴────────────┐
-                   ▼                         ▼
-    ┌─────────────────────┐     ┌─────────────────────┐
-    │  Server Instance 1  │     │  Server Instance 2  │
-    │     (Port 3001)     │     │     (Port 3002)     │
-    │   ID: "server-1"    │     │   ID: "server-2"    │
-    └──────────┬──────────┘     └──────────┬──────────┘
-               │                           │
-               │  @socket.io/redis-adapter │
-               │  (pub/sub across nodes)   │
-               └────────────┬──────────────┘
-                            ▼
-                 ┌──────────────────────────────────────────────┐
-                 │              Redis Pub/Sub Layer             │
-                 │   Broadcasts events to all connected nodes   │
-                 └──────────────────────┬───────────────────────┘
-                                        ▼
-                 ┌──────────────────────────────────────────────┐
-                 │           MongoDB (Atlas or local)           │
-                 │   Single source of truth — all task state    │
-                 └──────────────────────────────────────────────┘
+                 ┌────────────────────────────────────────────────────────┐
+                 │          Browser Clients (Tabs / Devices)              │
+                 │   (JWT authenticated, room-scoped to boardId)          │
+                 └───────────────────────────┬────────────────────────────┘
+                                             │
+                             WebSocket (ws://) connection
+                                             │
+                                             ▼
+                 ┌────────────────────────────────────────────────────────┐
+                 │          Load Balancer (Port 3000)                     │
+                 │   Node.js http-proxy — round-robin + WS proxy          │
+                 └──────────────┬───────────────────────────┬─────────────┘
+                                │                           │
+                 ┌──────────────┴───────────┐   ┌───────────┴─────────────┐
+                 ▼                          ▼   ▼                         ▼
+  ┌───────────────────────────┐       ┌───────────────────────────┐   ┌───────────────┐
+  │     Server Instance 1     │       │     Server Instance 2     │   │  /health &    │
+  │        (Port 3001)        │       │        (Port 3002)        │   │  /metrics     │
+  │ Socket Auth + Zod hardener│       │ Socket Auth + Zod hardener│   └───────────────┘
+  └─────────────┬─────────────┘       └─────────────┬─────────────┘
+                │                                   │
+                │     @socket.io/redis-adapter      │
+                │     (Pub/Sub room broadcasting)   │
+                └─────────────────┬─────────────────┘
+                                  ▼
+                 ┌────────────────────────────────────────────────────────┐
+                 │                 Redis Pub/Sub & Presence               │
+                 │    Board Room events & active presence tracking        │
+                 └────────────────────────┬───────────────────────────────┘
+                                          ▼
+                 ┌────────────────────────────────────────────────────────┐
+                 │                MongoDB (Atlas or Local)                │
+                 │ Single source of truth with fractional index ordering  │
+                 └────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## How Each Requirement Is Met
+## Technical Enhancements & Enterprise Hardening
 
-| Requirement | Implementation |
-|---|---|
-| **Multiple server instances** | `npm run server1` (port 3001) and `npm run server2` (port 3002) run as fully independent Node.js processes. |
-| **Redis pub/sub adapter** | `@socket.io/redis-adapter` with separate `pubClient` / `subClient`. An event from a client on Server 1 travels through Redis and is instantly received by clients on Server 2. |
-| **MongoDB persistence** | All task mutations (`task:create`, `task:move`, `task:delete`) are saved to MongoDB **before** broadcasting. Neither server holds state in memory — MongoDB is the single source of truth. |
-| **Hard disconnect + auto-reconnect** | Socket.io client uses `reconnection: true, reconnectionAttempts: Infinity`. A **"Simulate Disconnect"** button in the UI calls `socket.disconnect()` then `socket.connect()` after 2 seconds. |
-| **State recovery on different instance** | On every connect/reconnect, the server runs `Task.find()` from MongoDB and emits `state:sync` to the client. Switching from Server 1 to Server 2 gives the full board state immediately. |
-| **Multi-device / multi-tab consistency** | `userId` is stored in `localStorage` (shared across all same-origin tabs). Each tab gets a unique `tabId` in `sessionStorage`. Both are sent in the socket handshake query. |
-| **Load balancer / instance switching** | `load-balancer.js` proxies HTTP and WebSocket traffic round-robin across both instances. The in-app **Target** dropdown lets you switch instances manually without restarting anything. |
+| Feature Area | Key Vulnerability Addressed | Enterprise Technical Implementation |
+|---|---|---|
+| **Socket Authentication** | Sockets accepted raw `userId` in query string with no verification | JWT Token verification in `io.use()` middleware (`middleware/socketAuth.js`). Token issued via `/api/auth/token` endpoint. |
+| **Room Scoping** | `io.emit()` broadcasted every event globally to all users | Scoped broadcasts strictly to `board:${boardId}` rooms. Multi-room isolation supported. |
+| **Redis Fail-Fast & Health** | Redis disconnection caused silent split-brain | `/health` checks Mongo & Redis, returning `503 Service Unavailable` if unhealthy. `REDIS_STRICT=true` fails fast on startup. |
+| **Ordering & Race Conditions** | `countDocuments` ordering created race conditions on concurrent adds | Fractional Indexing string keys (`fractional-indexing` package, e.g. `'a0'`, `'a1'`) eliminate index reordering races. |
+| **Optimistic Concurrency** | Concurrent task edits silently overwrote each other | Added incrementing `version` field to `Task` model. Mismatched version edits are rejected with structured `CONCURRENCY_CONFLICT` error. |
+| **Schema Validation** | `findByIdAndUpdate` bypassed Mongoose validators | Passed `{ runValidators: true, new: true }` on all Mongoose update operations. Payload validation enforced via `Zod` schemas. |
+| **Incremental Reconnect Recovery** | Client re-fetched full board state on every reconnect | Incremental delta event logs (`BoardEvent` model) send missed delta updates since client's `lastSeenVersion`. |
+| **Idempotent Retries & Offline Queue** | Network retries duplicated mutations | Client generates `clientMutationId` per mutation; server deduplicates retried requests via `IdempotencyManager`. Pending changes queued offline and flushed on reconnect. |
+| **Socket Hardening & Rate Limiting** | Sockets vulnerable to payload spam and malformed inputs | Per-socket sliding-window rate limiter (`defaultLimiter`, max 20 events/5s) and Zod payload validation for all socket handlers. |
+| **Infrastructure & Docker** | Non-serverless container orchestration | Multi-stage `Dockerfile` and `docker-compose.yml` orchestrating Server 1, Server 2, Node Load Balancer, Redis, and MongoDB. |
+| **Metrics & Health** | Lack of cluster monitoring | Exposed `/metrics` endpoint returning active connections, memory footprint, board count, and Redis adapter status. |
 
 ---
 
@@ -73,172 +77,104 @@ A distributed, real-time collaborative Kanban board built with **Node.js, Expres
 
 | Layer | Technology |
 |---|---|
-| Runtime | Node.js 18+ |
-| HTTP server | Express 4 |
-| Real-time | Socket.io 4.x |
-| Cross-instance sync | `@socket.io/redis-adapter` + Redis 8.x |
-| Database | MongoDB via Mongoose (Atlas or local) |
-| Load balancer | Node.js `http-proxy` (WebSocket-aware) |
-| Frontend | React 19, Vite, Tailwind CSS v4 |
-| Font | Outfit (Google Fonts) |
+| Runtime | Node.js 18+ / 20+ |
+| Backend Server | Express 4, Socket.io 4.x |
+| Cross-Instance Sync | `@socket.io/redis-adapter` + Redis 7.x |
+| Database | MongoDB via Mongoose (Atlas or local container) |
+| Data Validation | Zod 3.x |
+| Security | JSON Web Tokens (`jsonwebtoken`) |
+| Ordering System | Fractional Indexing (`fractional-indexing`) |
+| Orchestration | Docker, Docker Compose |
+| Frontend | React 19, Vite 8, Tailwind CSS v4 |
 
 ---
 
-## Project Structure
+## Project Directory Structure
 
 ```
 digiryte-challenge-02/
-├── server.js              # Express + Socket.io server (runs as multiple instances)
-├── load-balancer.js       # HTTP/WS round-robin proxy across server instances
+├── server.js                  # Enterprise Express + Socket.io server (JWT, Zod, Redis adapter, Delta sync)
+├── load-balancer.js           # HTTP/WebSocket load balancer proxy across server nodes
+├── Dockerfile                 # Multi-stage production Docker build
+├── docker-compose.yml         # Container orchestration (Mongo, Redis, Server1, Server2, Load Balancer)
+├── middleware/
+│   └── socketAuth.js          # JWT authentication middleware for Socket.IO (`io.use()`)
 ├── models/
-│   └── Task.js            # Mongoose schema: title, column, order, createdBy, timestamps
+│   ├── Task.js                # Task model (boardId, title, column, fractional order, version)
+│   └── BoardEvent.js          # Board event log model for incremental delta sync recovery
+├── utils/
+│   ├── validation.js          # Zod payload validation schemas (`taskCreate`, `taskMove`, `taskDelete`)
+│   ├── rateLimiter.js         # Sliding-window per-socket rate limiter
+│   └── idempotency.js         # Client mutation ID deduplication manager
+├── tests/
+│   └── sync.test.js           # Multi-instance dual-client integration test & mid-session failover runner
 ├── client/
-│   ├── index.html         # Vite entry — Outfit font, Digiryte favicon
-│   ├── vite.config.js     # Vite + React + Tailwind CSS v4 plugin
-│   ├── public/
-│   │   └── logo.svg       # Digiryte logo (favicon + header)
+│   ├── index.html             # React SPA entry
+│   ├── vite.config.js         # Vite configuration
 │   └── src/
-│       ├── main.jsx       # React root
-│       ├── App.jsx        # Socket event handling, task state, board layout
-│       ├── index.css      # Tailwind import + CSS custom properties
-│       ├── socket.js      # Socket.io client, userId/tabId identity, helpers
+│       ├── socket.js          # Socket client (JWT handshake, delta version tracking, offline queue)
+│       ├── App.jsx            # Main React component (Optimistic UI, presence, board switcher)
 │       └── components/
-│           ├── StatusBar.jsx  # Connection status, server info, target switcher, name editor
-│           ├── Column.jsx     # Kanban column with drag-and-drop
-│           └── TaskCard.jsx   # Task card with move buttons and delete
-├── .env.example           # Environment variable template
-├── package.json           # Scripts + backend dependencies
-└── README.md
+│           ├── StatusBar.jsx   # Cluster status, board room selector, online presence list
+│           ├── Column.jsx      # Kanban column wrapper
+│           └── TaskCard.jsx    # Task card with drag-and-drop support
 ```
 
 ---
 
-## Prerequisites
+## Local Development & Testing Instructions
 
-- **Node.js** v18+
-- **MongoDB** — local (`mongodb://localhost:27017`) or [MongoDB Atlas](https://www.mongodb.com/atlas) (free tier)
-- **Redis** — local (`redis://localhost:6379`) or [Upstash Redis](https://upstash.com) (free tier)
+### 1. Run Automated Integration Tests
 
-Install Redis locally on macOS:
-```bash
-brew install redis && brew services start redis
-```
-
----
-
-## Quick Start
-
-### 1. Install Dependencies
+Executes the automated multi-node integration test suite:
+- Connects dual `socket.io-client` connections on ports 3005 and 3006
+- Tests JWT authentication & room scoping
+- Verifies cross-node Redis event broadcasting
+- Validates Zod payload rejection & optimistic concurrency conflicts
+- Kills Server 1 mid-session and verifies failover to Server 2 without data loss
 
 ```bash
-# Backend
-npm install
-
-# Frontend
-cd client && npm install && cd ..
+npm test
 ```
 
-### 2. Configure Environment
+### 2. Run Local Multi-Instance Cluster
+
+In separate terminal windows:
 
 ```bash
-cp .env.example .env
-```
-
-Edit `.env`:
-
-```env
-PORT=3001
-SERVER_ID=server-1
-MONGODB_URI=mongodb://localhost:27017/kanban-sync
-REDIS_URL=redis://localhost:6379
-```
-
-> Use your MongoDB Atlas URI and/or an Upstash Redis URL if running without local services.
-
-### 3. Build the Frontend
-
-```bash
-npm run build
-```
-
-### 4. Start the Cluster
-
-Open three separate terminals:
-
-```bash
-# Terminal 1 — Server Instance 1
+# Terminal 1: Server Instance 1 (Port 3001)
 npm run server1
 
-# Terminal 2 — Server Instance 2
+# Terminal 2: Server Instance 2 (Port 3002)
 npm run server2
 
-# Terminal 3 — Load Balancer
+# Terminal 3: Node Load Balancer (Port 3000)
 npm run lb
+
+# Terminal 4: Client Dev Server (Port 5173)
+npm run client:dev
 ```
 
-Open **http://localhost:3000** in your browser.
+### 3. Run via Docker Compose
 
-> **Dev mode** (with hot reload): `npm run client:dev` — Vite runs on port 5173 and defaults to connecting to `http://localhost:3001`.
+Spin up the entire cluster (MongoDB, Redis, Server 1, Server 2, and Load Balancer) in containers:
 
----
+```bash
+docker-compose up --build
+```
 
-## Verification Tests
-
-### Test 1 — Cross-Instance Real-Time Sync
-1. Open **Tab A** at `http://localhost:3001` — status bar shows `Node: server-1`.
-2. Open **Tab B** at `http://localhost:3002` — status bar shows `Node: server-2`.
-3. Add a task in Tab A.
-4. **Expected:** Task appears instantly in Tab B — bridged via Redis Pub/Sub across separate processes.
-5. Move the task to "In Progress" from Tab B.
-6. **Expected:** Tab A updates immediately.
-
-### Test 2 — State Recovery on a Different Instance
-1. Connect to `http://localhost:3001` and add several tasks.
-2. Use the **Target** dropdown in the status bar to switch to `Server 2 (Port 3002)`.
-3. The page reloads; the client connects to Server 2.
-4. **Expected:** Full board state is recovered from MongoDB via `state:sync` — no data loss.
-
-### Test 3 — Hard Disconnect & Auto-Reconnect
-1. Click **"Simulate Disconnect"** in the status bar.
-2. Status changes to "Disconnected" and the reconnection overlay appears.
-3. After ~2 seconds the socket reconnects automatically.
-4. **Expected:** Status turns green ("Connected") and the board is re-synced from MongoDB.
-5. **Alternative:** Kill `npm run server1` (`Ctrl+C`). Clients on the load balancer detect the drop and reconnect automatically.
-
-### Test 4 — Multi-Tab / Multi-Device Consistency
-1. Open two browser tabs both at `http://localhost:3000`.
-2. Status bar shows:
-   - `User: Santhosh` — same across both tabs (from `localStorage`)
-   - `Tab: tab-xxxx` — different in each tab (from `sessionStorage`)
-3. Create or delete a task in one tab.
-4. **Expected:** The other tab updates instantly — same user room, different socket connections.
-
-### Test 5 — Custom User Name
-1. Click the **✎** pencil icon next to the user name in the status bar.
-2. Type a new name and press Enter (or click away).
-3. **Expected:** The page reloads, the new name is saved to `localStorage`, and all future tasks show that name as the author.
+Access points:
+- **Load Balancer**: `http://localhost:3000`
+- **Server 1**: `http://localhost:3001`
+- **Server 2**: `http://localhost:3002`
+- **Health Endpoint**: `http://localhost:3001/health`
+- **Metrics Endpoint**: `http://localhost:3001/metrics`
 
 ---
 
-## NPM Scripts
+## Verification & Test Scenarios
 
-| Script | Command | Description |
-|---|---|---|
-| `npm run server1` | `PORT=3001 SERVER_ID=server-1 node server.js` | Start Server Instance 1 |
-| `npm run server2` | `PORT=3002 SERVER_ID=server-2 node server.js` | Start Server Instance 2 |
-| `npm run lb` | `node load-balancer.js` | Start the WebSocket-aware load balancer on port 3000 |
-| `npm run build` | `npm --prefix client run build` | Build React + Tailwind production bundle into `client/dist/` |
-| `npm run client:dev` | `npm --prefix client run dev` | Start Vite dev server on port 5173 with HMR |
-| `npm start` | `node server.js` | Start a single server instance (uses `.env` for PORT/SERVER_ID) |
-
----
-
-## Key Design Decisions
-
-1. **WebSocket-only transport.** The Socket.io client uses `transports: ['websocket']`, which avoids HTTP long-polling. This eliminates the need for sticky sessions when distributing across multiple instances — WebSocket connections are stateless at the load balancer level.
-
-2. **MongoDB as the source of truth, not in-memory state.** Every mutation is persisted to MongoDB *before* being broadcast via Redis. On any reconnect, the server runs a fresh `Task.find()` — state is always consistent even if a server process restarts mid-session.
-
-3. **Identity model: `userId` (persistent) + `tabId` (per-tab).** `userId` in `localStorage` identifies a user across all their tabs and windows on the same browser. `tabId` in `sessionStorage` is unique per tab and is cleared when the tab closes. Both are sent in the socket handshake query so the server can join the correct `user:{userId}` room.
-
-4. **Graceful Redis fallback.** If Redis is not reachable at startup, the server logs a clear warning and continues running. A single-instance deployment still works fully; cross-instance sync is simply not available.
+1. **Room Isolation**: Open two tabs with different board IDs (`board-A` vs `board-B`) using the Board Room selector in the header. Actions in `board-A` are strictly scoped and do not leak to `board-B`.
+2. **Offline Mutation Queue**: Click **"Simulate Disconnect"** or turn off network, create/move tasks while offline, and observe pending mutations flushing automatically upon reconnect.
+3. **Concurrency Conflict**: Attempt to move a task with a stale version. The UI displays an error toast notification (`⚠️ Move Rejected: Task was updated by another user`) and refreshes state.
+4. **Presence Tracking**: Open multiple tabs in the same board room to observe active online user counts in real time.

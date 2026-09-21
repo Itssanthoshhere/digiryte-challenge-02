@@ -1,9 +1,19 @@
 import { useState } from 'react';
-import { SERVER_OPTIONS, CURRENT_SERVER_URL, switchServer, simulateHardDisconnect, updateUserId } from '../socket';
+import {
+  SERVER_OPTIONS,
+  CURRENT_SERVER_URL,
+  switchServer,
+  simulateHardDisconnect,
+  updateUserId,
+  updateBoardId,
+  boardId,
+} from '../socket';
 
-function StatusBar({ status, serverInfo, userId, deviceId }) {
+function StatusBar({ status, serverInfo, userId, deviceId, activeUsers = [] }) {
   const [userName, setUserName] = useState(userId);
   const [isEditingUser, setIsEditingUser] = useState(false);
+  const [currentBoard, setCurrentBoard] = useState(boardId);
+  const [isEditingBoard, setIsEditingBoard] = useState(false);
 
   const statusStyles = {
     connected: 'bg-emerald-50/80 border-emerald-200 text-emerald-800',
@@ -31,6 +41,14 @@ function StatusBar({ status, serverInfo, userId, deviceId }) {
     }
   };
 
+  const handleBoardSubmit = (e) => {
+    e.preventDefault();
+    setIsEditingBoard(false);
+    if (currentBoard.trim() && currentBoard !== boardId) {
+      updateBoardId(currentBoard);
+    }
+  };
+
   return (
     <header className={`w-full flex flex-wrap justify-between items-center gap-3 px-4 md:px-8 py-2.5 text-xs font-medium border-b transition-colors duration-300 ${statusStyles[status] || statusStyles.connected}`}>
       {/* Left: Status & Current Server Instance */}
@@ -46,6 +64,34 @@ function StatusBar({ status, serverInfo, userId, deviceId }) {
             Node: <strong className="text-[#db4435] font-bold">{serverInfo.serverId}</strong> (port {serverInfo.port})
           </span>
         )}
+
+        {/* Board Room Scoping */}
+        <div className="flex items-center gap-1.5 bg-white border border-slate-200 shadow-xs rounded-lg px-2 py-0.5 ml-1">
+          <span className="text-slate-500">Board Room:</span>
+          {isEditingBoard ? (
+            <form onSubmit={handleBoardSubmit} className="inline-flex">
+              <input
+                type="text"
+                autoFocus
+                value={currentBoard}
+                onChange={(e) => setCurrentBoard(e.target.value)}
+                onBlur={handleBoardSubmit}
+                className="w-28 px-1 py-0.5 text-[11px] font-bold text-[#db4435] bg-[#fff3f2] border border-[#fddad7] rounded-sm focus:outline-none"
+                placeholder="board id"
+              />
+            </form>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setIsEditingBoard(true)}
+              className="font-bold text-slate-800 hover:text-[#db4435] flex items-center gap-1 cursor-pointer transition-colors"
+              title="Click to switch board room"
+            >
+              <span>{boardId}</span>
+              <span className="text-slate-400 text-[10px]">✎</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Middle: Instance Switcher & Disconnect Simulator */}
@@ -76,8 +122,15 @@ function StatusBar({ status, serverInfo, userId, deviceId }) {
         </button>
       </div>
 
-      {/* Right: Multi-Device / Custom User Name & Tab IDs */}
+      {/* Right: Online Presence, User Name & Tab IDs */}
       <div className="flex items-center gap-3 text-slate-600 text-[11px]">
+        {activeUsers.length > 0 && (
+          <div className="flex items-center gap-1 bg-emerald-100/70 border border-emerald-300 text-emerald-900 rounded-lg px-2 py-0.5" title="Online users in this board room">
+            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+            <span className="font-semibold text-[10px]">{activeUsers.length} online ({activeUsers.join(', ')})</span>
+          </div>
+        )}
+
         <div className="flex items-center gap-1.5 bg-white border border-slate-200 shadow-xs rounded-lg px-2 py-0.5">
           <span className="text-slate-500">User:</span>
           {isEditingUser ? (

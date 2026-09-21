@@ -1,5 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
-import { socket, userId, deviceId } from './socket';
+import {
+  socket,
+  userId,
+  boardId,
+  deviceId,
+  emitMutation,
+  updateLastSeenVersion,
+} from './socket';
 import StatusBar from './components/StatusBar';
 import Column from './components/Column';
 
@@ -7,8 +14,17 @@ function App() {
   const [tasks, setTasks] = useState([]);
   const [status, setStatus] = useState('connected');
   const [serverInfo, setServerInfo] = useState(null);
+  const [activeUsers, setActiveUsers] = useState([]);
   const [taskTitle, setTaskTitle] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState(null);
+
+  const showErrorToast = (msg) => {
+    setErrorMessage(msg);
+    setTimeout(() => {
+      setErrorMessage(null);
+    }, 4000);
+  };
 
   // ── Socket event listeners ──
   useEffect(() => {
@@ -32,25 +48,57 @@ function App() {
       console.log('[Socket] Connected to server:', data.serverId);
     };
 
-    const onStateSync = (serverTasks) => {
-      console.log('[State] Synced', serverTasks.length, 'tasks from server');
-      setTasks(serverTasks);
+    const onPresenceUpdate = (data) => {
+      if (data && data.activeUsers) {
+        setActiveUsers(data.activeUsers);
+      }
     };
 
-    const onTaskCreated = (task) => {
+    const onStateSync = (data) => {
+      const serverTasks = Array.isArray(data) ? data : data.tasks || [];
+      const version = data.boardVersion || 0;
+      console.log('[State] Full Sync:', serverTasks.length, 'tasks, version:', version);
+      setTasks(serverTasks);
+      updateLastSeenVersion(version);
+    };
+
+    const onStateDelta = (data) => {
+      const events = data.events || [];
+      console.log('[State] Delta Sync:', events.length, 'missed events received');
+      events.forEach((evt) => {
+        if (evt.version) updateLastSeenVersion(evt.version);
+        if (evt.eventType === 'task:created' && evt.payload.task) {
+          setTasks((prev) => {
+            if (prev.some((t) => t._id === evt.payload.task._id)) return prev;
+            return [...prev, evt.payload.task];
+          });
+        } else if (evt.eventType === 'task:moved' && evt.payload.task) {
+          setTasks((prev) =>
+            prev.map((t) => (t._id === evt.payload.task._id ? evt.payload.task : t))
+          );
+        } else if (evt.eventType === 'task:deleted' && evt.payload.taskId) {
+          setTasks((prev) => prev.filter((t) => t._id !== evt.payload.taskId));
+        }
+      });
+    };
+
+    const onTaskCreated = (data) => {
+      const task = data.task || data;
+      if (data.boardVersion) updateLastSeenVersion(data.boardVersion);
       setTasks((prev) => {
         if (prev.find((t) => t._id === task._id)) return prev;
         return [...prev, task];
       });
     };
 
-    const onTaskMoved = (task) => {
-      setTasks((prev) =>
-        prev.map((t) => (t._id === task._id ? task : t))
-      );
+    const onTaskMoved = (data) => {
+      const task = data.task || data;
+      if (data.boardVersion) updateLastSeenVersion(data.boardVersion);
+      setTasks((prev) => prev.map((t) => (t._id === task._id ? task : t)));
     };
 
     const onTaskDeleted = (data) => {
+      if (data.boardVersion) updateLastSeenVersion(data.boardVersion);
       setTasks((prev) => prev.filter((t) => t._id !== data.taskId));
     };
 
@@ -58,7 +106,9 @@ function App() {
     socket.on('disconnect', onDisconnect);
     socket.on('reconnect_attempt', onReconnectAttempt);
     socket.on('server:info', onServerInfo);
+    socket.on('presence:update', onPresenceUpdate);
     socket.on('state:sync', onStateSync);
+    socket.on('state:delta', onStateDelta);
     socket.on('task:created', onTaskCreated);
     socket.on('task:moved', onTaskMoved);
     socket.on('task:deleted', onTaskDeleted);
@@ -72,14 +122,16 @@ function App() {
       socket.off('disconnect', onDisconnect);
       socket.off('reconnect_attempt', onReconnectAttempt);
       socket.off('server:info', onServerInfo);
+      socket.off('presence:update', onPresenceUpdate);
       socket.off('state:sync', onStateSync);
+      socket.off('state:delta', onStateDelta);
       socket.off('task:created', onTaskCreated);
       socket.off('task:moved', onTaskMoved);
       socket.off('task:deleted', onTaskDeleted);
     };
   }, []);
 
-  // ── Actions ──
+  // ── Actions with Optimistic UI & Server ACK Error Handling ──
   const handleAddTask = useCallback(
     (e) => {
       e.preventDefault();
@@ -87,12 +139,12 @@ function App() {
       if (!title || isSubmitting) return;
 
       setIsSubmitting(true);
-      socket.emit('task:create', { title }, (response) => {
+      emitMutation('task:create', { title }, (response) => {
         setIsSubmitting(false);
         if (response && response.success) {
           setTaskTitle('');
-        } else {
-          console.error('Failed to create task:', response?.error);
+        } else if (response && response.error) {
+          showErrorToast(`Create Failed: ${response.error.message || response.error}`);
         }
       });
     },
@@ -100,19 +152,56 @@ function App() {
   );
 
   const handleDeleteTask = useCallback((taskId) => {
-    socket.emit('task:delete', { taskId });
-  }, []);
+    const targetTask = tasks.find((t) => t._id === taskId);
+    const expectedVersion = targetTask ? targetTask.version : undefined;
 
-  // Handles both button-click moves and drag-and-drop (same operation)
-  const handleMoveTask = useCallback((taskId, toColumn) => {
-    socket.emit('task:move', { taskId, toColumn });
-  }, []);
+    // Optimistic remove
+    setTasks((prev) => prev.filter((t) => t._id !== taskId));
 
-  // ── Group tasks by column ──
+    emitMutation('task:delete', { taskId, expectedVersion }, (response) => {
+      if (response && !response.success) {
+        showErrorToast(`Delete Rejected: ${response.error.message || response.error}`);
+        // Re-sync if optimistic action failed
+        socket.emit('board:sync', { boardId });
+      }
+    });
+  }, [tasks]);
+
+  const handleMoveTask = useCallback(
+    (taskId, toColumn) => {
+      const targetTask = tasks.find((t) => t._id === taskId);
+      if (!targetTask || targetTask.column === toColumn) return;
+
+      const expectedVersion = targetTask.version;
+
+      // Optimistic move
+      setTasks((prev) =>
+        prev.map((t) => (t._id === taskId ? { ...t, column: toColumn } : t))
+      );
+
+      emitMutation(
+        'task:move',
+        { taskId, toColumn, expectedVersion },
+        (response) => {
+          if (response && !response.success) {
+            showErrorToast(`Move Rejected: ${response.error.message || response.error}`);
+            // Re-sync state on concurrency conflict or validation error
+            socket.emit('board:sync', { boardId });
+          }
+        }
+      );
+    },
+    [tasks]
+  );
+
+  // ── Group tasks by column & sort by order ──
+  const sortTasks = (taskList) =>
+    [...taskList].sort((a, b) => (a.order > b.order ? 1 : a.order < b.order ? -1 : 0));
+
   const tasksByColumn = {
-    todo: tasks.filter((t) => t.column === 'todo'),
-    'in-progress': tasks.filter((t) => t.column === 'in-progress'),
-    done: tasks.filter((t) => t.column === 'done'),
+    todo: sortTasks(tasks.filter((t) => t.column === 'todo')),
+    'in-progress': sortTasks(tasks.filter((t) => t.column === 'in-progress')),
+    done: sortTasks(tasks.filter((t) => t.column === 'done')),
   };
 
   const columns = [
@@ -128,31 +217,39 @@ function App() {
         serverInfo={serverInfo}
         userId={userId}
         deviceId={deviceId}
+        activeUsers={activeUsers}
       />
 
-      {/* Digiryte Branded Header */}
-      <header className="text-center pt-8 pb-3 px-4 flex flex-col items-center">
-        <div className="flex items-center gap-3.5 mb-2">
+      {/* Error Toast Notification */}
+      {errorMessage && (
+        <div className="fixed top-14 right-6 z-50 bg-[#db4435] text-white font-semibold text-xs px-4 py-3 rounded-xl shadow-lg border border-red-700 animate-bounce">
+          ⚠️ {errorMessage}
+        </div>
+      )}
+
+      {/* Header */}
+      <header className="text-center pt-6 pb-2 px-4 flex flex-col items-center">
+        <div className="flex items-center gap-3.5 mb-1.5">
           <img
             src="/logo.svg"
             alt="Digiryte Logo"
-            className="h-11 w-11 rounded-xl shadow-md border border-slate-200/80 transition-transform duration-200 hover:scale-105"
+            className="h-10 w-10 rounded-xl shadow-md border border-slate-200/80 transition-transform duration-200 hover:scale-105"
           />
           <div className="text-left">
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#171c26] flex items-center gap-1.5">
               Digiryte <span className="text-[#db4435]">Sync</span>
             </h1>
             <p className="text-[11px] font-semibold tracking-wider uppercase text-[#5d6d77]">
-              Distributed Real-Time Kanban
+              Enterprise Real-Time Kanban
             </p>
           </div>
         </div>
-        <p className="text-[#5d6d77] text-xs sm:text-sm mt-1 max-w-lg mx-auto">
-          Synchronized across multiple server instances via Redis Pub/Sub & MongoDB.
+        <p className="text-[#5d6d77] text-xs sm:text-sm mt-0.5 max-w-lg mx-auto">
+          JWT Authenticated • Room Scoped (`{boardId}`) • Fractional Indexing • Optimistic Concurrency Control
         </p>
       </header>
 
-      {/* Add Task Input with Digiryte Red Accents */}
+      {/* Add Task Form */}
       <div className="w-full max-w-xl mx-auto px-4 py-3">
         <form onSubmit={handleAddTask} className="flex gap-2.5">
           <input
@@ -189,18 +286,18 @@ function App() {
         ))}
       </main>
 
-      {/* Disconnection / Reconnection Overlay */}
+      {/* Disconnection Overlay */}
       {status !== 'connected' && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex flex-col items-center justify-center p-4">
+        <div className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-xs flex flex-col items-center justify-center p-4">
           <div className="bg-white border border-slate-200 rounded-2xl p-6 max-w-sm w-full text-center shadow-2xl">
             <div className="relative flex justify-center mb-4">
               <div className="w-10 h-10 border-3 border-slate-200 border-t-[#db4435] rounded-full animate-spin"></div>
             </div>
             <h3 className="text-base font-bold text-slate-900">
-              {status === 'reconnecting' ? 'Reconnecting to cluster...' : 'Connection Interrupted'}
+              {status === 'reconnecting' ? 'Reconnecting to Cluster...' : 'Connection Interrupted'}
             </h3>
             <p className="text-xs text-slate-500 mt-2">
-              Auto-reconnecting. State will automatically recover from MongoDB once reconnected.
+              Mutations queued locally. Will flush automatically upon reconnecting to Redis cluster.
             </p>
           </div>
         </div>

@@ -1,0 +1,78 @@
+version: '3.8'
+
+services:
+  mongo:
+    image: mongo:7.0
+    container_name: kanban-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: kanban-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  server1:
+    build: .
+    container_name: kanban-server-1
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - SERVER_ID=server-1
+      - MONGODB_URI=mongodb://mongo:27017/kanban-sync
+      - REDIS_URL=redis://redis:6379
+      - REDIS_STRICT=true
+      - JWT_SECRET=super-secret-kanban-key-2026
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  server2:
+    build: .
+    container_name: kanban-server-2
+    ports:
+      - "3002:3002"
+    environment:
+      - PORT=3002
+      - SERVER_ID=server-2
+      - MONGODB_URI=mongodb://mongo:27017/kanban-sync
+      - REDIS_URL=redis://redis:6379
+      - REDIS_STRICT=true
+      - JWT_SECRET=super-secret-kanban-key-2026
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  load-balancer:
+    build: .
+    container_name: kanban-lb
+    command: ["node", "load-balancer.js"]
+    ports:
+      - "3000:3000"
+    environment:
+      - LB_PORT=3000
+      - SERVERS=http://server1:3001,http://server2:3002
+    depends_on:
+      - server1
+      - server2
+
+volumes:
+  mongo_data:

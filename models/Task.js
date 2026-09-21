@@ -2,6 +2,12 @@ const mongoose = require('mongoose');
 
 const taskSchema = new mongoose.Schema(
   {
+    boardId: {
+      type: String,
+      required: true,
+      default: 'default-board',
+      index: true,
+    },
     title: {
       type: String,
       required: true,
@@ -14,8 +20,13 @@ const taskSchema = new mongoose.Schema(
       default: 'todo',
     },
     order: {
+      type: String,
+      required: true,
+      default: 'a0',
+    },
+    version: {
       type: Number,
-      default: 0,
+      default: 1,
     },
     createdBy: {
       type: String,
