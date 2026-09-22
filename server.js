@@ -8,7 +8,8 @@ const mongoose = require('mongoose');
 const { createClient } = require('redis');
 const { createAdapter } = require('@socket.io/redis-adapter');
 const cors = require('cors');
-const { generateKeyBetween } = require('fractional-indexing');
+
+let generateKeyBetween;
 
 const Task = require('./models/Task');
 const BoardEvent = require('./models/BoardEvent');
@@ -128,6 +129,10 @@ async function recordBoardEvent(boardId, eventType, payload) {
 }
 
 async function startServer() {
+  // ── Load ES Modules dynamically ──
+  const fi = await import('fractional-indexing');
+  generateKeyBetween = fi.generateKeyBetween;
+
   // ── Connect to MongoDB ──
   try {
     await mongoose.connect(MONGODB_URI);
