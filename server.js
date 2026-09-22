@@ -226,8 +226,24 @@ async function startServer() {
     const activeUsers = updateBoardPresence(boardId, socket.id, userId, false);
     io.to(roomName).emit('presence:update', { boardId, activeUsers });
 
-    // Send server info
-    socket.emit('server:info', { serverId: SERVER_ID, port: PORT, redisConnected });
+    // Helper to fetch task list for a board (includes legacy tasks without boardId field for default-board)
+    const fetchBoardTasks = async (targetBoard) => {
+      const queryFilter =
+        targetBoard === 'default-board'
+          ? { $or: [{ boardId: 'default-board' }, { boardId: { $exists: false } }, { boardId: null }] }
+          : { boardId: targetBoard };
+      return await Task.find(queryFilter).sort({ order: 1, createdAt: 1 });
+    };
+
+    // Send initial task state immediately on connection
+    try {
+      const initialTasks = await fetchBoardTasks(boardId);
+      const latestEvent = await BoardEvent.findOne({ boardId }).sort({ version: -1 });
+      const currentVersion = latestEvent ? latestEvent.version : 0;
+      socket.emit('state:sync', { tasks: initialTasks, boardVersion: currentVersion });
+    } catch (err) {
+      console.error(`[${SERVER_ID}] Error fetching initial task state:`, err.message);
+    }
 
     // ── Board State Request / Delta Recovery ──
     socket.on('board:sync', async (data = {}) => {
@@ -258,7 +274,7 @@ async function startServer() {
         }
 
         // Full fetch if no lastSeenVersion or delta gap too large
-        const tasks = await Task.find({ boardId: targetBoard }).sort({ order: 1, createdAt: 1 });
+        const tasks = await fetchBoardTasks(targetBoard);
         const latestEvent = await BoardEvent.findOne({ boardId: targetBoard }).sort({ version: -1 });
         const currentVersion = latestEvent ? latestEvent.version : 0;
 
